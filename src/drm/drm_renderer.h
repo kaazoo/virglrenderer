@@ -14,7 +14,7 @@
 
 #include "virgl_util.h"
 
-#if defined(ENABLE_DRM_MSM) || defined(ENABLE_DRM_AMDGPU)
+#if defined(ENABLE_DRM_MSM) || defined(ENABLE_DRM_AMDGPU) || defined(ENABLE_DRM_ASAHI)
 
 int drm_renderer_init(int drm_fd);
 

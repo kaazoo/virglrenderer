@@ -104,6 +104,11 @@ if with_drm_amdgpu
   conf_data.set('ENABLE_DRM_AMDGPU', 1)
 endif
 
+with_drm_asahi = drm_renderers.contains('asahi-experimental')
+if with_drm_asahi
+  conf_data.set('ENABLE_DRM_ASAHI', 1)
+endif
+
 with_drm_renderers = drm_renderers.length() > 0
 
 libdrm_dep = dependency('libdrm', version : '>=2.4.50', required: with_drm_renderers or get_option('venus'))

@@ -64,6 +64,7 @@ option(
   type : 'array',
   value : [],
   choices : [
+    'asahi-experimental',
     'amdgpu-experimental',
     'msm',
   ],
