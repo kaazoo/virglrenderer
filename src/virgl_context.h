@@ -129,6 +129,13 @@ struct virgl_context {
                        uint32_t flags,
                        uint32_t ring_idx,
                        uint64_t fence_id);
+
+   /* map a resource into a particular address */
+   void* (*resource_map)(struct virgl_context *ctx,
+                         struct virgl_resource *res,
+                         void* addr,
+                         int32_t prot,
+                         int32_t flags);
 };
 
 struct virgl_context_foreach_args {

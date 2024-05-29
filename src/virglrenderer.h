@@ -421,6 +421,8 @@ VIRGL_EXPORT int
 virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_create_blob_args *args);
 
 VIRGL_EXPORT int virgl_renderer_resource_map(uint32_t res_handle, void **map, uint64_t *out_size);
+VIRGL_EXPORT int virgl_renderer_resource_map2(uint32_t res_handle, void *addr, size_t length,
+                                              int prot, int flags);
 
 VIRGL_EXPORT int virgl_renderer_resource_unmap(uint32_t res_handle);
 

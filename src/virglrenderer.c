@@ -1253,6 +1253,45 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
    return ret;
 }
 
+int virgl_renderer_resource_map2(uint32_t res_handle, void *addr,
+                                 size_t length, int prot, int flags)
+{
+   int ret = 0;
+   void *map = NULL;
+   struct virgl_context *ctx;
+   struct virgl_resource *res = virgl_resource_lookup(res_handle);
+
+   if (!(flags & MAP_FIXED))
+      return -EINVAL;
+
+   if (!res || res->mapped || res->map_size != length || res->pipe_resource)
+      return -EINVAL;
+
+   switch (res->fd_type) {
+      case VIRGL_RESOURCE_FD_DMABUF:
+      case VIRGL_RESOURCE_FD_SHM:
+         map = mmap(addr, res->map_size, prot, flags, res->fd, 0);
+         break;
+      case VIRGL_RESOURCE_OPAQUE_HANDLE:
+         ctx = virgl_context_lookup(res->opaque_handle_context_id);
+         if (!ctx || !ctx->resource_map)
+            return -EINVAL;
+
+         map = ctx->resource_map(ctx, res, addr, prot, flags);
+      case VIRGL_RESOURCE_FD_OPAQUE:
+      case VIRGL_RESOURCE_FD_INVALID:
+         /* Avoid a default case so that -Wswitch will tell us at compile time
+          * if a new virgl resource type is added without being handled here.
+          */
+      break;
+   }
+
+   if (!map || map == MAP_FAILED)
+      return -EINVAL;
+
+   return ret;
+}
+
 int virgl_renderer_resource_unmap(uint32_t res_handle)
 {
    TRACE_FUNC();
