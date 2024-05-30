@@ -1360,6 +1360,8 @@ virgl_renderer_resource_export_blob(uint32_t res_id, uint32_t *fd_type, int *fd)
       *fd_type = VIRGL_RENDERER_BLOB_FD_TYPE_SHM;
       break;
    case VIRGL_RESOURCE_OPAQUE_HANDLE:
+      *fd_type = VIRGL_RENDERER_BLOB_OPAQUE_HANDLE;
+      break;
    case VIRGL_RESOURCE_FD_INVALID:
       /* Avoid a default case so that -Wswitch will tell us at compile time if a
        * new virgl resource type is added without being handled here.
