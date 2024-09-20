@@ -832,6 +832,14 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       }
    }
 
+   struct asahi_ccmd_submit_extres *extres = (struct asahi_ccmd_submit_extres *)ptr;
+   if (((uint64_t)extres + req->extres_count * sizeof(struct asahi_ccmd_submit_extres)) >
+       payload_end) {
+      drm_log("invalid extres array");
+      ret = -EINVAL;
+      goto free_cmd;
+   }
+
    struct drm_asahi_submit submit = {
       .flags = 0,
       .queue_id = req->queue_id,
@@ -840,17 +848,22 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       .commands = (uint64_t)(uintptr_t)&commands[0],
    };
 
-   struct drm_asahi_sync in_sync = { .sync_type = DRM_ASAHI_SYNC_SYNCOBJ };
+   unsigned in_sync_count = 0;
+   struct drm_asahi_sync *in_syncs =
+      malloc(sizeof(struct drm_asahi_sync) * (1 + req->extres_count));
+   int *extres_fds = malloc(sizeof(int) * req->extres_count);
+
    int in_fence_fd = virgl_context_take_in_fence_fd(&actx->base);
 
    if (in_fence_fd >= 0) {
+      struct drm_asahi_sync in_sync = { .sync_type = DRM_ASAHI_SYNC_SYNCOBJ };
       ret = drmSyncobjCreate(actx->fd, 0, &in_sync.handle);
       assert(ret == 0);
       ret = drmSyncobjImportSyncFile(actx->fd, in_sync.handle, in_fence_fd);
       if (ret == 0) {
-         submit.in_sync_count = 1;
-         submit.in_syncs = (uint64_t)(uintptr_t)&in_sync;
+         in_syncs[in_sync_count++] = in_sync;
       }
+      close(in_fence_fd);
    }
 
    struct drm_asahi_sync out_sync = { .sync_type = DRM_ASAHI_SYNC_SYNCOBJ };
@@ -863,20 +876,94 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       drm_dbg("out syncobj creation failed");
    }
 
+   // Do the dance to get the in_syncs populated from external resources
+   for (uint32_t i = 0; i < req->extres_count; i++) {
+      extres_fds[i] = -1;
+
+      if (!(extres[i].flags & (ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE)))
+         continue;
+
+      struct asahi_object *obj = asahi_get_object_from_res_id(actx, extres[i].res_id);
+      if (!obj || !obj->exportable) {
+         drm_log("invalid extres res_id %u", extres[i].res_id);
+         continue;
+      }
+
+      ret = drmPrimeHandleToFD(actx->fd, obj->handle, DRM_CLOEXEC | DRM_RDWR,
+                               &extres_fds[i]);
+      if (ret < 0 || extres_fds[i] == -1) {
+         drm_log("failed to get dmabuf fd: %s", strerror(errno));
+         continue;
+      }
+
+      if (!(extres[i].flags & ASAHI_EXTRES_READ))
+         continue;
+
+      struct dma_buf_export_sync_file export_sync_file_ioctl = {
+         .flags = DMA_BUF_SYNC_RW,
+         .fd = -1,
+      };
+
+      ret =
+         drmIoctl(extres_fds[i], DMA_BUF_IOCTL_EXPORT_SYNC_FILE, &export_sync_file_ioctl);
+      if (ret < 0 || export_sync_file_ioctl.fd < 0) {
+         drm_log("failed to export sync file: %s", strerror(errno));
+         continue;
+      }
+
+      /* Create a new syncobj */
+      uint32_t sync_handle;
+      int ret = drmSyncobjCreate(actx->fd, 0, &sync_handle);
+      if (ret < 0) {
+         drm_log("failed to create syncobj: %s", strerror(errno));
+         close(export_sync_file_ioctl.fd);
+         continue;
+      }
+
+      /* Import the sync file into it */
+      ret = drmSyncobjImportSyncFile(actx->fd, sync_handle, export_sync_file_ioctl.fd);
+      close(export_sync_file_ioctl.fd);
+      if (ret < 0) {
+         drm_log("failed to import sync file into syncobj");
+         drmSyncobjDestroy(actx->fd, sync_handle);
+         continue;
+      }
+
+      in_syncs[in_sync_count++] =
+         (struct drm_asahi_sync){ .sync_type = DRM_ASAHI_SYNC_SYNCOBJ,
+                                  .handle = sync_handle };
+   }
+
+   submit.in_syncs = (uint64_t)(uintptr_t)in_syncs;
+   submit.in_sync_count = in_sync_count;
+
    ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_SUBMIT, &submit);
    if (ret) {
       drm_log("DRM_IOCTL_ASAHI_SUBMIT failed: %d", ret);
    }
 
-   if (in_fence_fd >= 0) {
-      close(in_fence_fd);
-      drmSyncobjDestroy(actx->fd, in_sync.handle);
+   for (unsigned i = 0; i < in_sync_count; i++) {
+      drmSyncobjDestroy(actx->fd, in_syncs[i].handle);
    }
 
    if (ret == 0) {
       int submit_fd;
       ret = drmSyncobjExportSyncFile(actx->fd, out_sync.handle, &submit_fd);
       if (ret == 0) {
+         for (uint32_t i = 0; i < req->extres_count; i++) {
+            if (extres_fds[i] < 0 || !(extres[i].flags & ASAHI_EXTRES_WRITE))
+               continue;
+
+            struct dma_buf_import_sync_file import_sync_file_ioctl = {
+               .flags = DMA_BUF_SYNC_WRITE,
+               .fd = submit_fd,
+            };
+
+            ret = drmIoctl(extres_fds[i], DMA_BUF_IOCTL_IMPORT_SYNC_FILE,
+                           &import_sync_file_ioctl);
+            if (ret < 0)
+               drm_log("failed to import sync file into dmabuf");
+         }
          drm_timeline_set_last_fence_fd(&actx->timelines[0], submit_fd);
          drm_dbg("set last fd ring_idx: %d", submit_fd);
       } else {
@@ -886,7 +973,13 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       drm_log("command submission failed");
    }
 
+   for (uint32_t i = 0; i < req->extres_count; i++)
+      if (extres_fds[i] >= 0)
+         close(extres_fds[i]);
+
    drmSyncobjDestroy(actx->fd, out_sync.handle);
+   free(in_syncs);
+   free(extres_fds);
 free_cmd:
    free(commands);
 
