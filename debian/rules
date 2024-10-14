@@ -1,0 +1,75 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/buildflags.mk
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export CK_TIMEOUT_MULTIPLIER=100
+
+# libva is not currently in Ubuntu main
+ifeq ($(shell dpkg-vendor --query vendor),Ubuntu)
+VIDEO := -Dvideo=false
+else
+VIDEO := -Dvideo=true
+endif
+
+%:
+	dh $@ --buildsystem=meson
+
+configure-opts = \
+	-Dtests=false \
+	$(VIDEO) \
+
+ifneq (armel, ${DEB_HOST_ARCH})
+# vulkan requires 32bit atomic ints, armel lacks one (#1021861)
+configure-opts += \
+	-Drender-server=true \
+	-Drender-server-worker=process \
+	-Dvenus=true \
+	-Ddrm-renderers=asahi-experimental
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure -- ${configure-opts}
+
+# deal with #842246
+override_dh_autoreconf:
+
+execute_after_dh_auto_install:
+# remove Requires.private from .pc file (#1019485)
+# these are needed for static build and we're not providing static lib
+# virgl does not #include<> headers from their dependencies, only libs
+# which are needed for static linking. meson puts this to Requires.private
+# (instead of Libs.private), and both makes pkgconfig to fail if the
+# corresponding .pc files are not found. virglrenderer has grown quite a
+# few "internal" dependencies, - instead of repeading almost whole Build-Deps
+# in virglrenderer-dev's Depends, let's just remove whole Requires.private.
+# Maybe someday debian will grow somehting like dh_pkgconfigdeps to
+# automate maintenance of this unnecessary set of dependencies.
+# meson knows which libraries it generates so can omit these
+# (Libs|Requires).private in cade of dynamic-only library.
+	sed -i '/^Requires\.private:/D' \
+	  debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/virglrenderer.pc
+
+ignore-test-failure =
+ifeq (riscv64,${DEB_HOST_ARCH})
+# see #962018, self-test fails on riscv64
+ignore-test-failure = -
+endif
+ifeq (32,${DEB_HOST_ARCH_BITS})
+# on 32bits arches, selftest sometimes fails and sometimes not.
+# ignore failures for now
+ignore-test-failure = -
+endif
+
+# override_dh_auto_test:
+# ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+# 	${ignore-test-failure}\
+# 	LIBGL_ALWAYS_SOFTWARE=1 \
+# 	GALLIUM_DRIVER=llvmpipe \
+# 	VRENDTEST_USE_EGL_SURFACELESS=1 \
+# 		meson test -C obj-*  -t 100 || { \
+# 		    echo '*** Self-tests failue, the logfile follows: ***' >&2; \
+# 		    cat obj-*/meson-logs/testlog.txt >&2; \
+# 		    echo '*** Self-tests failue log end ***' >&2; \
+# 		    false; \
+# 		}
+# endif

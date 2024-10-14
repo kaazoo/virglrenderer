@@ -1,0 +1,357 @@
+virglrenderer (1.0.1~asahi-20240925-1asahi1.24.04) noble; urgency=medium
+
+  * Bump to Asahi fork, asahi-20240925 tag
+
+ -- Andreas Schröder <andreas@kernelpanik.net>  Tue, 14 Oct 2024 21:45:00 +0200
+
+virglrenderer (1.0.0-1ubuntu2) noble; urgency=high
+
+  * No change rebuild for 64-bit time_t and frame pointers.
+
+ -- Julian Andres Klode <juliank@ubuntu.com>  Mon, 08 Apr 2024 18:21:41 +0200
+
+virglrenderer (1.0.0-1ubuntu1) noble; urgency=medium
+
+  * Merge with Debian unstable (LP: #2040435). Remaining changes:
+    - d/rules: Disable video acceleration on Ubuntu until libva gets
+      repromoted
+
+ -- Bryce Harrington <bryce@canonical.com>  Wed, 22 Nov 2023 18:15:12 -0800
+
+virglrenderer (1.0.0-1) unstable; urgency=medium
+
+  * New upstream version 1.0.0
+  * d/rules: Fix build options
+  * d/rules: switch to llvmpipe for testing
+  * d/*.symbols: Update symbols file
+
+ -- Gert Wollny <gewo@debian.org>  Sat, 14 Oct 2023 20:28:16 +0200
+
+virglrenderer (0.10.4-1ubuntu1) lunar; urgency=medium
+
+  * Merge with Debian unstable (LP: #1993453).
+  * Added changes:
+    - d/rules: Disable video acceleration on Ubuntu until libva gets repromoted.
+  * Dropped:
+    - d/p/lp-1950941*: fix out of bounds check
+      (LP #1950941)
+      [Fixed in upstream release 0.10.0]
+    - out-of-bounds write in read_transfer_data()
+      + d/p/CVE-2022-0135.patch: Add test to resource OOB write
+        and fix it in src/vrend_renderer.c, tests/test_fuzzer_formats.c.
+      [Fixed in upstream release 0.10.0]
+    - info leak in vrend_resource_alloc_buffer()
+      + d/p/CVE-2022-0175.patch: clear memory when allocating a
+        host-backed memory resource in src/vrend_renderer.c,
+        tests/test_virgl_transfer.c.
+      [Fixed in upstream release 0.10.0]
+
+ -- Bryce Harrington <bryce@canonical.com>  Thu, 05 Jan 2023 06:49:25 -0800
+
+virglrenderer (0.10.4-1) unstable; urgency=medium
+
+  * New upstream version 0.10.4
+
+ -- Gert Wollny <gewo@debian.org>  Wed, 04 Jan 2023 13:22:55 +0100
+
+virglrenderer (0.10.3-2) unstable; urgency=medium
+
+  * Another non-maintainer upload.
+  * d/rules: disable render-server on armel since it requires
+    (not enabled) venus (Really closes: #1021861)
+  * install the newly usr/libexec/virgl_render_server into virgl-server
+    (on !armel)
+  * d/rules: show testlog.txt (to stderr) in case of selftest failure
+  * d/rules: ignore selftest failures on all 32bit arches too, for now
+  * d/control: build-depend on dh-exec (for arch filtering of virgl-server)
+  * d/control: switch to debhelper-compat=13
+  * d/control: bump Standards-Version to 4.6.1 (no changes)
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 20 Oct 2022 20:19:02 +0300
+
+virglrenderer (0.10.3-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * remove Requires.private from the generated virglrenderer.pc file
+    so that users of libvirglrenderer-dev can be built without its
+    build dependencies. Closes: #1019485
+  * Do not build venus on armel since it requires 32bit atomics
+    Closes: #1021861
+  * d/rules: make dh_auto_test rule a bit easier to read and maintain
+
+ -- Michael Tokarev <mjt@tls.msk.ru>  Thu, 20 Oct 2022 14:29:58 +0300
+
+virglrenderer (0.10.3-1) unstable; urgency=medium
+
+  * New upstream version 0.10.3
+  * d/rules: enable venus and renderserver
+  * d/control: add vulkan dependency
+
+ -- Gert Wollny <gewo@debian.org>  Thu, 22 Sep 2022 18:15:47 +0200
+
+virglrenderer (0.10.1-1) unstable; urgency=medium
+
+  * debian/salsa-ci.yml added
+  * New upstream version 0.10.1
+  * d/p: remove patches that were merged upstream
+
+ -- Gert Wollny <gewo@debian.org>  Tue, 06 Sep 2022 14:24:54 +0200
+
+virglrenderer (0.10.0-1) unstable; urgency=medium
+
+  * New upstream version 0.10.0
+  * Add patch to fix video includes
+  * Enable video backend and add dependency accordingly
+ -- Gert Wollny <gewo@debian.org>  Fri, 02 Sep 2022 17:36:05 +0200
+
+virglrenderer (0.9.1-1~exp1ubuntu2) jammy; urgency=medium
+
+  * SECURITY UPDATE: out-of-bounds write in read_transfer_data()
+    - debian/patches/CVE-2022-0135.patch: Add test to resource OOB write
+      and fix it in src/vrend_renderer.c, tests/test_fuzzer_formats.c.
+    - CVE-2022-0135
+  * SECURITY UPDATE: info leak in vrend_resource_alloc_buffer()
+    - debian/patches/CVE-2022-0175.patch: clear memory when allocating a
+      host-backed memory resource in src/vrend_renderer.c,
+      tests/test_virgl_transfer.c.
+    - CVE-2022-0175
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Mon, 28 Feb 2022 14:19:07 -0500
+
+virglrenderer (0.9.1-1~exp1ubuntu1) jammy; urgency=medium
+
+  * Merge with Debian unstable (LP: #1959175). Remaining changes:
+    - d/p/lp-1950941*: fix out of bounds check (LP #1950941)
+
+ -- Utkarsh Gupta <utkarsh@ubuntu.com>  Fri, 25 Feb 2022 02:23:43 +0530
+
+virglrenderer (0.9.1-1~exp1) experimental; urgency=medium
+
+  * New upstream version 0.9.1
+
+ -- Gert Wollny <gewo@debian.org>  Tue, 20 Apr 2021 09:20:06 +0200
+
+virglrenderer (0.9.0-1~exp1) experimental; urgency=medium
+
+  * New upstream version 0.9.0
+  * d/*.symbols: update symbols file
+
+ -- Gert Wollny <gewo@debian.org>  Tue, 06 Apr 2021 15:24:55 +0200
+
+virglrenderer (0.8.2-5ubuntu1) jammy; urgency=medium
+
+  * d/p/lp-1950941*: fix out of bounds check (LP: #1950941)
+
+ -- Christian Ehrhardt <christian.ehrhardt@canonical.com>  Thu, 02 Dec 2021 08:34:48 +0100
+
+virglrenderer (0.8.2-5build1) impish; urgency=medium
+
+  * No-change rebuild to build packages with zstd compression.
+
+ -- Matthias Klose <doko@ubuntu.com>  Thu, 07 Oct 2021 12:26:08 +0200
+
+virglrenderer (0.8.2-5) unstable; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/rules: respect nocheck, Closes: #976647
+
+ -- Gert Wollny <gewo@debian.org>  Mon, 07 Dec 2020 13:38:41 +0100
+
+virglrenderer (0.8.2-4) unstable; urgency=medium
+
+  [ Christian Ehrhardt ]
+  * d/rules: Ignore test failures on riscv64
+
+  [ janitor-bot ]
+  * Trim trailing whitespace.
+  * Use secure copyright file specification URI.
+  * Set debhelper-compat version in Build-Depends.
+  * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
+    Repository-Browse.
+  * Update standards version to 4.5.0, no changes needed.
+
+ -- Gert Wollny <gewo@debian.org>  Tue, 28 Jul 2020 18:18:52 +0200
+
+virglrenderer (0.8.2-3) unstable; urgency=medium
+
+  * d/virgl_test_server.1: correct section entry, Closes: #963345
+
+ -- Gert Wollny <gewo@debian.org>  Sun, 12 Jul 2020 19:54:57 +0200
+
+virglrenderer (0.8.2-2) unstable; urgency=medium
+
+  * re-updload to unstable
+
+ -- Gert Wollny <gewo@debian.org>  Sun, 26 Apr 2020 13:14:31 +0200
+
+virglrenderer (0.8.2-2~exp1) experimental; urgency=medium
+
+  * d/*.symbols: Add symbols file, Closes: #944907
+    Thanks Laurent Bigonville
+
+ -- Gert Wollny <gewo@debian.org>  Sat, 25 Apr 2020 16:24:31 +0200
+
+virglrenderer (0.8.2-1) unstable; urgency=medium
+
+  * New upstream version 0.8.2 Closes: #949954
+  * d/patches: remove all patches since they were applied upstream
+  * Fixes:  CVE-2020-8002 CVE-2020-8003
+
+ -- Gert Wollny <gewo@debian.org>  Wed, 12 Feb 2020 14:51:10 +0100
+
+virglrenderer (0.8.1-6) unstable; urgency=medium
+
+  * d/rules: Up the timeout a bit more, mips* seems to need this sometimes
+
+ -- Gert Wollny <gewo@debian.org>  Mon, 13 Jan 2020 15:56:55 +0100
+
+virglrenderer (0.8.1-5) unstable; urgency=medium
+
+  * d/p:0001 Add patch to swap bytes on pixel read back Closes: #948334
+  * d/rules: Run test always on softpipe
+
+ -- Gert Wollny <gerddie@pbg.beigert.it>  Mon, 13 Jan 2020 10:54:34 +0100
+
+virglrenderer (0.8.1-4) unstable; urgency=medium
+
+  * d/rules: also increase timeout for check library
+
+ -- Gert Wollny <gewo@debian.org>  Sat, 11 Jan 2020 12:22:21 +0100
+
+virglrenderer (0.8.1-3) unstable; urgency=medium
+
+  * d/rules: increase the timeout yet a bit more
+
+ -- Gert Wollny <gewo@debian.org>  Fri, 10 Jan 2020 11:14:39 +0100
+
+virglrenderer (0.8.1-2) unstable; urgency=medium
+
+  * d/rules: increase test timeout
+
+ -- Gert Wollny <gewo@debian.org>  Thu, 09 Jan 2020 18:42:01 +0100
+
+virglrenderer (0.8.1-1) unstable; urgency=medium
+
+  * New upstream version 0.8.1 Closes: #946942
+  * d/rules,d/control: Switch to meson build system
+  * Fixes:  CVE-2019-18389 CVE-2019-18391
+  * d/control: Update standards version to 4.4.1 (no changes)
+  * d/control: Add check to enable testing
+  * d/rules: Run tests with surfaceless
+  * d/control: Add python3-setuptools because meson wants it
+
+ -- Gert Wollny <gewo@debian.org>  Fri, 20 Dec 2019 14:06:51 +0100
+
+virglrenderer (0.8.0-2) unstable; urgency=medium
+
+  * d/control: Switch to python3, Closes: #943262
+
+ -- Gert Wollny <gewo@debian.org>  Wed, 23 Oct 2019 10:37:42 +0200
+
+virglrenderer (0.8.0-1) unstable; urgency=medium
+
+  * d/control: Set minimum required gbm version
+
+ -- Gert Wollny <gewo@debian.org>  Tue, 24 Sep 2019 12:52:05 +0200
+
+virglrenderer (0.8.0-1~exp1) experimental; urgency=medium
+
+  * d/watch: Update for gitlab.fdo
+  * New upstream version 0.8.0
+  * d/* Move to new so version and add package for the server
+  * d/copyright: Add Authors for new files
+
+ -- Gert Wollny <gewo@debian.org>  Thu, 29 Aug 2019 09:15:28 +0200
+
+virglrenderer (0.7.0-2) unstable; urgency=medium
+
+  [ Laurent Bigonville ]
+  * debian/control: Mark the packages as Multi-Arch: same
+
+  [ Gert Wollny ]
+  * rework repository to use prinstine-tar and standard branches
+  * d/control: Adopt package  Closes: #851490
+
+ -- Gert Wollny <gewo@debian.org>  Wed, 09 Jan 2019 12:27:29 +0100
+
+virglrenderer (0.7.0-1) unstable; urgency=medium
+
+  * QA upload.
+  * New upstream release. (Closes: #910779)
+    - Drop debian/patches/CVE-2017-6386, merged upstream
+  * debian/control: Update Vcs-* fields
+  * debian/control: Bump Standards-Version to 4.2.1 (no further changes)
+  * debian/control: Bump priority to optional, priority extra is deprecated
+  * debian/rules: Bump version in shlibs file
+
+ -- Laurent Bigonville <bigon@debian.org>  Thu, 11 Oct 2018 11:34:34 +0200
+
+virglrenderer (0.6.0-2) unstable; urgency=medium
+
+  * QA upload.
+  * Apply upstream fix for CVE-2017-6386 (guest exhausting host memory).
+    Closes: #872884
+
+ -- Adam Borowski <kilobyte@angband.pl>  Fri, 25 Aug 2017 03:12:15 +0200
+
+virglrenderer (0.6.0-1) unstable; urgency=medium
+
+  * QA upload.
+  * New upstream release. (Closes: #852603 #852604 #858255 #854728)
+  * debian/control:
+    - Bump Standards-Version to 4.0.1.
+    - Bump dh version to 10.
+    - Drop from B-D dh-autoreconf, autotools-dev, dpkg-dev no longer needed.
+    - Update homepage.
+    - Use secured VCS links.
+
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Mon, 21 Aug 2017 20:16:15 +0200
+
+virglrenderer (0.5.0-2) unstable; urgency=medium
+
+  * Update maintainer to Debian QA up (orphaning the package)
+
+ -- Daniel Pocock <daniel@pocock.pro>  Sun, 15 Jan 2017 16:07:24 +0100
+
+virglrenderer (0.5.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Daniel Pocock <daniel@pocock.pro>  Sat, 25 Jun 2016 11:00:40 +0200
+
+virglrenderer (0.4.0-6) unstable; urgency=high
+
+  * Non-maintainer upload.
+  * Install virglrenderer.pc pkg-config file (Closes: #818665).
+
+ -- Daniel Pocock <daniel@pocock.pro>  Tue, 05 Apr 2016 10:35:19 +0200
+
+virglrenderer (0.4.0-5) unstable; urgency=medium
+
+  * Only install libvirglrenderer.so in dev package (Closes: #817112)
+
+ -- Daniel Pocock <daniel@pocock.pro>  Sun, 13 Mar 2016 08:47:25 +0100
+
+virglrenderer (0.4.0-4) unstable; urgency=medium
+
+  * Add README.source
+
+ -- Daniel Pocock <daniel@pocock.pro>  Mon, 07 Mar 2016 14:30:51 +0100
+
+virglrenderer (0.4.0-3) unstable; urgency=medium
+
+  * Add extra debian/copyright detail.
+
+ -- Daniel Pocock <daniel@pocock.pro>  Sun, 06 Mar 2016 18:26:07 +0100
+
+virglrenderer (0.4.0-2) unstable; urgency=medium
+
+  * Add extra debian/copyright detail.
+
+ -- Daniel Pocock <daniel@pocock.pro>  Wed, 02 Mar 2016 18:42:12 +0100
+
+virglrenderer (0.4.0-1) unstable; urgency=medium
+
+  * Initial packaging. (Closes: #813657)
+
+ -- Daniel Pocock <daniel@pocock.pro>  Wed, 02 Mar 2016 13:48:07 +0100
