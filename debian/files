@@ -1,0 +1,6 @@
+libvirglrenderer-dev_1.0.1~asahi-20240925-1asahi1.24.04_arm64.deb libdevel optional
+libvirglrenderer1-dbgsym_1.0.1~asahi-20240925-1asahi1.24.04_arm64.ddeb debug optional automatic=yes
+libvirglrenderer1_1.0.1~asahi-20240925-1asahi1.24.04_arm64.deb libs optional
+virgl-server-dbgsym_1.0.1~asahi-20240925-1asahi1.24.04_arm64.ddeb debug optional automatic=yes
+virgl-server_1.0.1~asahi-20240925-1asahi1.24.04_arm64.deb otherosfs optional
+virglrenderer_1.0.1~asahi-20240925-1asahi1.24.04_arm64.buildinfo libs optional

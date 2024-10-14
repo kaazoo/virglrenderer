@@ -1,0 +1,3 @@
+shlibs:Depends=libc6 (>= 2.38), libdrm2 (>= 2.4.82), libepoxy0 (>= 1.5.4), libgbm1 (>= 7.11~1), libvulkan1 (>= 1.2.131.2), libx11-6
+misc:Depends=
+misc:Pre-Depends=
