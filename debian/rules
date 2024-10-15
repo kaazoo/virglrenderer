@@ -1,6 +1,10 @@
 #!/usr/bin/make -f
 
-include /usr/share/dpkg/buildflags.mk
+# Uncomment this to turn on verbose mode.
+# export DH_VERBOSE=1
+
+include /usr/share/dpkg/pkg-info.mk
+
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export CK_TIMEOUT_MULTIPLIER=100
 
@@ -73,3 +77,8 @@ endif
 # 		    false; \
 # 		}
 # endif
+
+# For maintainer use only, generate a tarball:
+gentarball:
+	git archive --format=tar main --prefix=$(DEB_SOURCE)-$(DEB_VERSION_UPSTREAM)/ \
+		| gzip -9 > ../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.gz
