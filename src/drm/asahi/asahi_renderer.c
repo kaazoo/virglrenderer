@@ -592,6 +592,7 @@ asahi_ccmd_ioctl_simple(struct asahi_context *actx, const struct vdrm_ccmd_req *
    case DRM_ASAHI_VM_DESTROY:
    case DRM_ASAHI_QUEUE_CREATE:
    case DRM_ASAHI_QUEUE_DESTROY:
+   case DRM_ASAHI_GET_TIME:
       break;
    default:
       drm_log("invalid ioctl: %08x (%u)", req->cmd, iocnr);
