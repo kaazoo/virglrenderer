@@ -643,7 +643,7 @@ asahi_ccmd_get_params(struct asahi_context *actx, const struct vdrm_ccmd_req *hd
    if (!rsp)
       return -ENOMEM;
 
-   req->params.pointer = (uint64_t)&rsp->params;
+   req->params.pointer = (uint64_t)(uintptr_t)&rsp->params;
 
    rsp->ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GET_PARAMS, &req->params);
 
@@ -779,13 +779,13 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       return -EINVAL;
    }
 
-   uint64_t payload_end =
-      (uint64_t)&req->payload + (hdr->len - sizeof(struct asahi_ccmd_submit_req));
+   uint64_t payload_end = (uint64_t)(uintptr_t)&req->payload +
+                          (hdr->len - sizeof(struct asahi_ccmd_submit_req));
 
    char *ptr = (char *)req->payload;
    for (uint32_t i = 0; i < req->command_count; i++) {
       struct drm_asahi_command *cmd = (struct drm_asahi_command *)ptr;
-      if (((uint64_t)cmd + sizeof(struct drm_asahi_command)) > payload_end) {
+      if (((uint64_t)(uintptr_t)cmd + sizeof(struct drm_asahi_command)) > payload_end) {
          ret = -EINVAL;
          goto free_cmd;
       }
@@ -796,14 +796,15 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
 
       ptr += sizeof(struct drm_asahi_command);
 
-      if (((uint64_t)ptr + commands[i].cmd_buffer_size) > payload_end) {
+      if (((uint64_t)(uintptr_t)ptr + commands[i].cmd_buffer_size) > payload_end) {
          ret = -EINVAL;
          goto free_cmd;
       }
       ptr += commands[i].cmd_buffer_size;
 
       if (commands[i].cmd_type == DRM_ASAHI_CMD_RENDER) {
-         struct drm_asahi_cmd_render *c = (struct drm_asahi_cmd_render *)cmd_buffer;
+         struct drm_asahi_cmd_render *c =
+            (struct drm_asahi_cmd_render *)(uintptr_t)cmd_buffer;
          drm_dbg("command is RENDER: fragments = %d", c->fragment_attachment_count);
 
          uint64_t attachments_size;
@@ -834,8 +835,8 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
    }
 
    struct asahi_ccmd_submit_extres *extres = (struct asahi_ccmd_submit_extres *)ptr;
-   if (((uint64_t)extres + req->extres_count * sizeof(struct asahi_ccmd_submit_extres)) >
-       payload_end) {
+   if (((uint64_t)(uintptr_t)extres +
+        req->extres_count * sizeof(struct asahi_ccmd_submit_extres)) > payload_end) {
       drm_log("invalid extres array");
       ret = -EINVAL;
       goto free_cmd;
