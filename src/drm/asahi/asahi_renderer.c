@@ -201,13 +201,34 @@ handle_from_res_id(struct asahi_context *actx, uint32_t res_id)
  * Probe capset params.
  */
 int
-asahi_renderer_probe(UNUSED int fd, struct virgl_renderer_capset_drm *capset)
+asahi_renderer_probe(int fd, struct virgl_renderer_capset_drm *capset)
 {
-   drm_log("");
+   drm_log("asahi_renderer_probe()");
 
    capset->wire_format_version = 2;
 
    nr_timelines = 1;
+
+   struct drm_asahi_params_global params = { 0 };
+
+   struct drm_asahi_get_params get_params = {
+      .pointer = (uint64_t)(uintptr_t)&params,
+      .param_group = 0,
+      .size = sizeof(params),
+   };
+
+   ssize_t ret = drmIoctl(fd, DRM_IOCTL_ASAHI_GET_PARAMS, &get_params);
+
+   if (ret) {
+      drm_err("DRM_IOCTL_ASAHI_GET_PARAMS failed");
+      return -EIO;
+   }
+
+   if (params.unstable_uabi_version != DRM_ASAHI_UNSTABLE_UABI_VERSION) {
+      drm_err("UABI version mismatch: Kernel %d, virglrenderer %d",
+              params.unstable_uabi_version, DRM_ASAHI_UNSTABLE_UABI_VERSION);
+      return -EIO;
+   }
 
    return 0;
 }
@@ -587,7 +608,6 @@ asahi_ccmd_ioctl_simple(struct asahi_context *actx, const struct vdrm_ccmd_req *
    /* Allow-list of supported ioctls: */
    unsigned iocnr = _IOC_NR(req->cmd) - DRM_COMMAND_BASE;
    switch (iocnr) {
-   case DRM_ASAHI_GET_PARAMS:
    case DRM_ASAHI_VM_CREATE:
    case DRM_ASAHI_VM_DESTROY:
    case DRM_ASAHI_QUEUE_CREATE:
@@ -631,20 +651,25 @@ asahi_ccmd_get_params(struct asahi_context *actx, const struct vdrm_ccmd_req *hd
    unsigned req_len = sizeof(*req);
 
    if (hdr->len != req_len) {
-      drm_log("%u != %u", hdr->len, req_len);
+      drm_err("asahi_ccmd_get_params: %u != %u", hdr->len, req_len);
       return -EINVAL;
    }
 
    struct asahi_ccmd_get_params_rsp *rsp;
-   unsigned rsp_len = sizeof(*rsp);
+   unsigned rsp_len = sizeof(*rsp) + req->params.size;
 
    rsp = asahi_context_rsp(actx, hdr, rsp_len);
-
    if (!rsp)
       return -ENOMEM;
 
-   req->params.pointer = (uint64_t)(uintptr_t)&rsp->params;
+   rsp->virt_uabi_version = ASAHI_PROTO_UNSTABLE_UABI_VERSION;
 
+   if (req->params.param_group != 0) {
+      rsp->ret = -EINVAL;
+      return 0;
+   }
+
+   req->params.pointer = (uint64_t)(uintptr_t)rsp->payload;
    rsp->ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GET_PARAMS, &req->params);
 
    return 0;
@@ -657,7 +682,7 @@ asahi_ccmd_gem_new(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
    int ret = 0;
 
    if (!valid_blob_id(actx, req->blob_id)) {
-      drm_log("Invalid blob_id %u\n", req->blob_id);
+      drm_log("Invalid blob_id %u", req->blob_id);
       ret = -EINVAL;
       goto out_error;
    }
@@ -678,28 +703,29 @@ asahi_ccmd_gem_new(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
 
    ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_CREATE, &gem_create);
    if (ret) {
-      drm_log("GEM_CREATE failed: %d (%s)\n", ret, strerror(errno));
+      drm_log("GEM_CREATE failed: %d (%s)", ret, strerror(errno));
       goto out_error;
    }
 
    /*
     * Second part, bind:
     */
+   if (req->addr) {
+      struct drm_asahi_gem_bind gem_bind = {
+         .op = ASAHI_BIND_OP_BIND,
+         .flags = req->bind_flags,
+         .handle = gem_create.handle,
+         .vm_id = req->vm_id,
+         .offset = 0,
+         .range = req->size,
+         .addr = req->addr,
+      };
 
-   struct drm_asahi_gem_bind gem_bind = {
-      .op = ASAHI_BIND_OP_BIND,
-      .flags = req->bind_flags,
-      .handle = gem_create.handle,
-      .vm_id = req->vm_id,
-      .offset = 0,
-      .range = req->size,
-      .addr = req->addr,
-   };
-
-   ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND, &gem_bind);
-   if (ret) {
-      drm_log("DRM_IOCTL_ASAHI_GEM_BIND failed: (handle=%d)\n", gem_create.handle);
-      goto out_close;
+      ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND, &gem_bind);
+      if (ret) {
+         drm_log("DRM_IOCTL_ASAHI_GEM_BIND failed: (handle=%d)", gem_create.handle);
+         goto out_close;
+      }
    }
 
    /*
@@ -716,7 +742,7 @@ asahi_ccmd_gem_new(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
 
    asahi_object_set_blob_id(actx, obj, req->blob_id);
 
-   drm_dbg("obj=%p, blob_id=%u, handle=%u\n", (void *)obj, obj->blob_id, obj->handle);
+   drm_dbg("obj=%p, blob_id=%u, handle=%u", (void *)obj, obj->blob_id, obj->handle);
 
    return 0;
 
@@ -731,32 +757,251 @@ out_error:
 static int
 asahi_ccmd_gem_bind(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
 {
-   const struct asahi_ccmd_gem_bind_req *req = to_asahi_ccmd_gem_bind_req(hdr);
-   struct asahi_object *obj = asahi_get_object_from_res_id(actx, req->res_id);
+   struct asahi_ccmd_gem_bind_req *req = to_asahi_ccmd_gem_bind_req(hdr);
+   struct drm_asahi_gem_bind *gem_bind = &req->bind;
    int ret = 0;
 
-   if (!obj) {
-      drm_log("Could not lookup obj: res_id=%u", req->res_id);
-      return -ENOENT;
+   if (gem_bind->handle) {
+      struct asahi_object *obj = asahi_get_object_from_res_id(actx, gem_bind->handle);
+
+      if (!obj) {
+         drm_err("Could not lookup obj: res_id=%u", gem_bind->handle);
+         return -ENOENT;
+      }
+
+      drm_dbg("gem_bind: handle=%d", obj->handle);
+      gem_bind->handle = obj->handle;
    }
-
-   drm_dbg("gem_bind: handle=%d\n", obj->handle);
-
-   struct drm_asahi_gem_bind gem_bind = {
-      .op = req->op,
-      .flags = req->flags,
-      .handle = obj->handle,
-      .vm_id = req->vm_id,
-      .offset = 0,
-      .range = req->size,
-      .addr = req->addr,
-   };
 
    ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND, &gem_bind);
    if (ret) {
-      drm_log("DRM_IOCTL_ASAHI_GEM_BIND failed: (handle=%d)\n", obj->handle);
+      drm_err("DRM_IOCTL_ASAHI_GEM_BIND failed: (handle=%d)", gem_bind->handle);
    }
 
+   return ret;
+}
+
+static int
+asahi_ccmd_gem_bind_object(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
+{
+   struct asahi_ccmd_gem_bind_object_req *req = to_asahi_ccmd_gem_bind_object_req(hdr);
+   struct drm_asahi_gem_bind_object *gem_bind = &req->bind;
+   int ret = 0;
+
+   struct asahi_ccmd_gem_bind_object_rsp *rsp;
+   unsigned rsp_len = sizeof(*rsp);
+   rsp = asahi_context_rsp(actx, hdr, rsp_len);
+
+   if (!rsp)
+      return -ENOMEM;
+
+   if (gem_bind->extensions) {
+      drm_err("asahi_ccmd_gem_bind_object: unexpected extensions\n");
+      rsp->ret = -EINVAL;
+      return 0;
+   }
+
+   if (gem_bind->handle) {
+      struct asahi_object *obj = asahi_get_object_from_res_id(actx, gem_bind->handle);
+
+      if (!obj) {
+         drm_err("Could not lookup obj: res_id=%u", gem_bind->handle);
+         rsp->ret = -ENOENT;
+         return 0;
+      }
+
+      drm_dbg("gem_bind: handle=%d", obj->handle);
+      gem_bind->handle = obj->handle;
+   }
+
+   ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND_OBJECT, gem_bind);
+   if (ret) {
+      drm_err("DRM_IOCTL_ASAHI_GEM_BIND_OBJECT failed: (handle=%d)", gem_bind->handle);
+   }
+
+   rsp->object_handle = gem_bind->object_handle;
+   rsp->ret = ret;
+
+   return 0;
+}
+
+static int
+asahi_deserialize_attachments(UNUSED struct asahi_context *actx, uint8_t **pptr,
+                              uint32_t attachment_count, uint8_t *end)
+{
+   uint64_t attachments_size =
+      (uint64_t)attachment_count * sizeof(struct drm_asahi_attachment);
+
+   *pptr += attachments_size;
+
+   if (*pptr > end) {
+      drm_err("attachments overflow command buffer");
+      return -EINVAL;
+   }
+
+   return 0;
+}
+
+static int
+asahi_deserialize_render_ext(struct asahi_context *actx, uint8_t **pptr, uint8_t *end)
+{
+   uint32_t ext_type = *(uint32_t *)*pptr;
+   uint64_t *p_next = (uint64_t *)(*pptr + 8);
+   uint64_t size;
+
+   switch (ext_type) {
+   case ASAHI_RENDER_EXT_TIMESTAMPS:
+      size = sizeof(struct drm_asahi_cmd_render_user_timestamps);
+      break;
+   default:
+      drm_err("unexpected render ext 0x%x", ext_type);
+      return -EINVAL;
+   }
+
+   *pptr += size;
+
+   if (*pptr > end) {
+      drm_err("render extension overflows command buffer");
+      return -EINVAL;
+   }
+
+   if (*p_next) {
+      *p_next = (uint64_t)(uintptr_t)*pptr;
+      return asahi_deserialize_render_ext(actx, pptr, end);
+   }
+
+   return 0;
+}
+
+static int
+asahi_deserialize_compute_ext(struct asahi_context *actx, uint8_t **pptr, uint8_t *end)
+{
+   uint32_t ext_type = *(uint32_t *)*pptr;
+   uint64_t *p_next = (uint64_t *)(*pptr + 8);
+   uint64_t size;
+
+   switch (ext_type) {
+   case ASAHI_COMPUTE_EXT_TIMESTAMPS:
+      size = sizeof(struct drm_asahi_cmd_compute_user_timestamps);
+      break;
+   default:
+      drm_err("unexpected compute ext 0x%x", ext_type);
+      return -EINVAL;
+   }
+
+   *pptr += size;
+
+   if (*pptr > end) {
+      drm_err("compute extension overflows command buffer");
+      return -EINVAL;
+   }
+
+   if (*p_next) {
+      *p_next = (uint64_t)(uintptr_t)*pptr;
+      return asahi_deserialize_compute_ext(actx, pptr, end);
+   }
+
+   return 0;
+}
+
+static int
+asahi_deserialize_render(struct asahi_context *actx, uint8_t **pptr,
+                         uint64_t cmd_buffer_size, uint8_t *end)
+{
+   uint8_t *ptr = *pptr;
+   int ret = 0;
+
+   if (cmd_buffer_size != sizeof(struct drm_asahi_cmd_render)) {
+      drm_err("unexpected render cmd size: %zd != %zd", (size_t)cmd_buffer_size,
+              sizeof(struct drm_asahi_cmd_render));
+      return -EINVAL;
+   }
+
+   struct drm_asahi_cmd_render *cmd = (struct drm_asahi_cmd_render *)ptr;
+   ptr += cmd_buffer_size;
+
+   cmd->vertex_attachments = (uint64_t)(uintptr_t)ptr;
+   if ((ret =
+           asahi_deserialize_attachments(actx, &ptr, cmd->vertex_attachment_count, end)))
+      return ret;
+
+   cmd->fragment_attachments = (uint64_t)(uintptr_t)ptr;
+   if ((ret = asahi_deserialize_attachments(actx, &ptr, cmd->fragment_attachment_count,
+                                            end)))
+      return ret;
+
+   if (cmd->extensions) {
+      cmd->extensions = (uint64_t)(uintptr_t)ptr;
+      ret = asahi_deserialize_render_ext(actx, &ptr, end);
+   }
+
+   *pptr = ptr;
+   return ret;
+}
+
+static int
+asahi_deserialize_compute(struct asahi_context *actx, uint8_t **pptr,
+                          uint64_t cmd_buffer_size, uint8_t *end)
+{
+   uint8_t *ptr = *pptr;
+   int ret = 0;
+
+   if (cmd_buffer_size != sizeof(struct drm_asahi_cmd_compute)) {
+      drm_err("unexpected compute cmd size: %zd != %zd", (size_t)cmd_buffer_size,
+              sizeof(struct drm_asahi_cmd_compute));
+      return -EINVAL;
+   }
+
+   struct drm_asahi_cmd_compute *cmd = (struct drm_asahi_cmd_compute *)ptr;
+   ptr += cmd_buffer_size;
+
+   cmd->attachments = (uint64_t)(uintptr_t)ptr;
+   if ((ret = asahi_deserialize_attachments(actx, &ptr, cmd->attachment_count, end)))
+      return ret;
+
+   if (cmd->extensions) {
+      cmd->extensions = (uint64_t)(uintptr_t)ptr;
+      ret = asahi_deserialize_compute_ext(actx, &ptr, end);
+   }
+
+   *pptr = ptr;
+   return ret;
+}
+
+static int
+asahi_deserialize_command(struct asahi_context *actx, uint8_t **pptr, uint8_t *end)
+{
+   uint8_t *ptr = *pptr;
+   int ret;
+
+   struct drm_asahi_command *cmd = (struct drm_asahi_command *)ptr;
+   ptr += sizeof(struct drm_asahi_command);
+   if (ptr > end) {
+      drm_err("command overflows command buffer");
+      return -EINVAL;
+   }
+
+   if (cmd->extensions != 0) {
+      drm_err("unexpected command extensions");
+      return -EINVAL;
+   }
+
+   cmd->cmd_buffer = (uint64_t)(uintptr_t)ptr;
+
+   switch (cmd->cmd_type) {
+   case DRM_ASAHI_CMD_RENDER:
+      ret = asahi_deserialize_render(actx, &ptr, cmd->cmd_buffer_size, end);
+      break;
+   case DRM_ASAHI_CMD_COMPUTE:
+      ret = asahi_deserialize_compute(actx, &ptr, cmd->cmd_buffer_size, end);
+      break;
+   default:
+      drm_err("invalid cmd type %d", cmd->cmd_type);
+      return -EINVAL;
+   }
+
+   if (ret == 0)
+      *pptr = ptr;
    return ret;
 }
 
@@ -776,74 +1021,30 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       req->command_count, sizeof(struct drm_asahi_command));
 
    if (hdr->len < sizeof(struct asahi_ccmd_submit_req)) {
+      drm_err("invalid cmd length");
       return -EINVAL;
    }
 
-   uint64_t payload_end = (uint64_t)(uintptr_t)&req->payload +
-                          (hdr->len - sizeof(struct asahi_ccmd_submit_req));
+   uint8_t *ptr = (uint8_t *)req->payload;
+   uint8_t *end = ptr + (hdr->len - sizeof(struct asahi_ccmd_submit_req));
 
-   char *ptr = (char *)req->payload;
    for (uint32_t i = 0; i < req->command_count; i++) {
-      struct drm_asahi_command *cmd = (struct drm_asahi_command *)ptr;
-      if (((uint64_t)(uintptr_t)cmd + sizeof(struct drm_asahi_command)) > payload_end) {
-         ret = -EINVAL;
-         goto free_cmd;
-      }
+      struct drm_asahi_command *cmd = (void *)ptr;
+
+      ret = asahi_deserialize_command(actx, &ptr, end);
       memcpy(&commands[i], cmd, sizeof(struct drm_asahi_command));
-
-      uint64_t cmd_buffer = (uint64_t)(uintptr_t)ptr + sizeof(struct drm_asahi_command);
-      commands[i].cmd_buffer = cmd_buffer;
-
-      ptr += sizeof(struct drm_asahi_command);
-
-      if (((uint64_t)(uintptr_t)ptr + commands[i].cmd_buffer_size) > payload_end) {
-         ret = -EINVAL;
-         goto free_cmd;
-      }
-      ptr += commands[i].cmd_buffer_size;
-
-      if (commands[i].cmd_type == DRM_ASAHI_CMD_RENDER) {
-         struct drm_asahi_cmd_render *c =
-            (struct drm_asahi_cmd_render *)(uintptr_t)cmd_buffer;
-         drm_dbg("command is RENDER: fragments = %d", c->fragment_attachment_count);
-
-         uint64_t attachments_size;
-         uint64_t attachments_end;
-         if (__builtin_mul_overflow(c->fragment_attachment_count,
-                                    sizeof(struct drm_asahi_attachment),
-                                    &attachments_size)) {
-            ret = -EINVAL;
-            goto free_cmd;
-         }
-         if (__builtin_add_overflow(cmd_buffer + commands[i].cmd_buffer_size,
-                                    attachments_size, &attachments_end)) {
-            ret = -EINVAL;
-            goto free_cmd;
-         }
-         if (attachments_end > payload_end) {
-            ret = -EINVAL;
-            goto free_cmd;
-         }
-
-         c->fragment_attachments = cmd_buffer + commands[i].cmd_buffer_size;
-         ptr += attachments_size;
-      } else if (commands[i].cmd_type == DRM_ASAHI_CMD_COMPUTE) {
-         drm_dbg("command is COMPUTE");
-      } else {
-         drm_log("Unknown command: %d", commands[i].cmd_type);
-      }
    }
 
-   struct asahi_ccmd_submit_extres *extres = (struct asahi_ccmd_submit_extres *)ptr;
-   if (((uint64_t)(uintptr_t)extres +
-        req->extres_count * sizeof(struct asahi_ccmd_submit_extres)) > payload_end) {
-      drm_log("invalid extres array");
+   struct asahi_ccmd_submit_res *extres = (struct asahi_ccmd_submit_res *)ptr;
+   ptr += req->extres_count * sizeof(struct asahi_ccmd_submit_res);
+   if (ptr > end) {
+      drm_err("invalid extres array");
       ret = -EINVAL;
       goto free_cmd;
    }
 
    struct drm_asahi_submit submit = {
-      .flags = 0,
+      .flags = req->flags,
       .queue_id = req->queue_id,
       .result_handle = handle_from_res_id(actx, req->result_res_id),
       .command_count = req->command_count,
@@ -1001,6 +1202,7 @@ static const struct ccmd {
    HANDLER(GEM_NEW, gem_new),
    HANDLER(GEM_BIND, gem_bind),
    HANDLER(SUBMIT, submit),
+   HANDLER(GEM_BIND_OBJECT, gem_bind_object),
 };
 
 static int
@@ -1067,7 +1269,7 @@ submit_cmd_dispatch(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
        * could just use p_atomic_set.
        */
       uint32_t seqno = hdr->seqno;
-      drm_log("updating seqno=%d\n", seqno);
+      drm_log("updating seqno=%d", seqno);
       p_atomic_xchg(&actx->shmem->base.seqno, seqno);
    }
 
