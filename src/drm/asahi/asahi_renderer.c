@@ -312,6 +312,8 @@ asahi_renderer_attach_resource(struct virgl_context *vctx, struct virgl_resource
 
          asahi_object_set_res_id(actx, obj, res->res_id);
 
+         obj->exportable = 1;
+
          drm_dbg("obj=%p, res_id=%u, handle=%u", (void *)obj, obj->res_id, obj->handle);
       } else {
          if (fd_type != VIRGL_RESOURCE_FD_INVALID)
@@ -1096,7 +1098,8 @@ asahi_ccmd_submit(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
 
       struct asahi_object *obj = asahi_get_object_from_res_id(actx, extres[i].res_id);
       if (!obj || !obj->exportable) {
-         drm_log("invalid extres res_id %u", extres[i].res_id);
+         drm_log("invalid extres res_id %u (%s)", extres[i].res_id,
+                 obj ? "not exportable" : "not found");
          continue;
       }
 
