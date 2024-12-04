@@ -773,7 +773,7 @@ asahi_ccmd_gem_bind(struct asahi_context *actx, const struct vdrm_ccmd_req *hdr)
       gem_bind->handle = obj->handle;
    }
 
-   ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND, &gem_bind);
+   ret = drmIoctl(actx->fd, DRM_IOCTL_ASAHI_GEM_BIND, gem_bind);
    if (ret) {
       drm_err("DRM_IOCTL_ASAHI_GEM_BIND failed: (handle=%d)", gem_bind->handle);
    }
@@ -945,11 +945,19 @@ asahi_deserialize_compute(struct asahi_context *actx, uint8_t **pptr,
 {
    uint8_t *ptr = *pptr;
    int ret = 0;
+   bool has_extensions = true;
 
    if (cmd_buffer_size != sizeof(struct drm_asahi_cmd_compute)) {
-      drm_err("unexpected compute cmd size: %zd != %zd", (size_t)cmd_buffer_size,
-              sizeof(struct drm_asahi_cmd_compute));
-      return -EINVAL;
+#if DRM_ASAHI_UNSTABLE_UABI_VERSION <= 10011
+      if (cmd_buffer_size == (sizeof(struct drm_asahi_cmd_compute) - 8)) {
+         has_extensions = false;
+      } else
+#endif
+      {
+         drm_err("unexpected compute cmd size: %zd != %zd", (size_t)cmd_buffer_size,
+                 sizeof(struct drm_asahi_cmd_compute));
+         return -EINVAL;
+      }
    }
 
    struct drm_asahi_cmd_compute *cmd = (struct drm_asahi_cmd_compute *)ptr;
@@ -959,7 +967,7 @@ asahi_deserialize_compute(struct asahi_context *actx, uint8_t **pptr,
    if ((ret = asahi_deserialize_attachments(actx, &ptr, cmd->attachment_count, end)))
       return ret;
 
-   if (cmd->extensions) {
+   if (has_extensions && cmd->extensions) {
       cmd->extensions = (uint64_t)(uintptr_t)ptr;
       ret = asahi_deserialize_compute_ext(actx, &ptr, end);
    }
