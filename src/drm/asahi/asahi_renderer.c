@@ -790,17 +790,20 @@ asahi_ccmd_gem_bind_object(struct asahi_context *actx, const struct vdrm_ccmd_re
    struct drm_asahi_gem_bind_object *gem_bind = &req->bind;
    int ret = 0;
 
-   struct asahi_ccmd_gem_bind_object_rsp *rsp;
+   struct asahi_ccmd_gem_bind_object_rsp *rsp = NULL;
    unsigned rsp_len = sizeof(*rsp);
-   rsp = asahi_context_rsp(actx, hdr, rsp_len);
 
-   if (!rsp)
-      return -ENOMEM;
+   if (req->bind.op == ASAHI_BIND_OBJECT_OP_BIND) {
+      /* Only bind has a response */
+      rsp = asahi_context_rsp(actx, hdr, rsp_len);
+      if (!rsp)
+         return -ENOMEM;
+   }
 
    if (gem_bind->extensions) {
       drm_err("asahi_ccmd_gem_bind_object: unexpected extensions\n");
-      rsp->ret = -EINVAL;
-      return 0;
+      ret = -EINVAL;
+      goto exit_rsp;
    }
 
    if (gem_bind->handle) {
@@ -808,8 +811,8 @@ asahi_ccmd_gem_bind_object(struct asahi_context *actx, const struct vdrm_ccmd_re
 
       if (!obj) {
          drm_err("Could not lookup obj: res_id=%u", gem_bind->handle);
-         rsp->ret = -ENOENT;
-         return 0;
+         ret = -ENOENT;
+         goto exit_rsp;
       }
 
       drm_dbg("gem_bind: handle=%d", obj->handle);
@@ -821,10 +824,14 @@ asahi_ccmd_gem_bind_object(struct asahi_context *actx, const struct vdrm_ccmd_re
       drm_err("DRM_IOCTL_ASAHI_GEM_BIND_OBJECT failed: (handle=%d)", gem_bind->handle);
    }
 
-   rsp->object_handle = gem_bind->object_handle;
-   rsp->ret = ret;
-
-   return 0;
+exit_rsp:
+   if (rsp) {
+      rsp->object_handle = gem_bind->object_handle;
+      rsp->ret = ret;
+      return 0;
+   } else {
+      return ret;
+   }
 }
 
 static int
