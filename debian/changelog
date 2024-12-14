@@ -1,3 +1,10 @@
+virglrenderer (1.0.1~asahi-20240925-2asahi2.24.10) oracular; urgency=medium
+
+  * Bump to Asahi fork, asahi-20240925 tag
+  * Build on oracular
+
+ -- Andreas Schröder <andreas@kernelpanik.net>  Tue, 3 Dec 2024 21:51:00 +0100
+
 virglrenderer (1.0.1~asahi-20240925-1asahi1.24.04) noble; urgency=medium
 
   * Bump to Asahi fork, asahi-20240925 tag
